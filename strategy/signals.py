@@ -38,6 +38,9 @@ Then:
 Entry / exit rules
 ------------------
 Entry  : |z| > Z_ENTRY   →  short spread if z > 0,  long if z < 0
+         AND momentum filter: spread must have already begun reverting
+           Long  entry (z < 0): spread[-1] > SMA(spread, momentum_window)
+           Short entry (z > 0): spread[-1] < SMA(spread, momentum_window)
 Exit   : |z| ≤ Z_EXIT    (mean-reversion target reached)
          OR  bars_held ≥ halflife_multiplier × half_life  (time-stop)
 """
@@ -192,21 +195,57 @@ def compute_position_size(
 
 def get_entry_direction(
     zscore: float,
+    spread_series: np.ndarray,
     threshold: float = Z_ENTRY,
+    momentum_window: int = 12,
 ) -> int:
     """
-    Determine trade direction from the z-score.
+    Determine trade direction from the z-score, gated by a momentum filter.
+
+    The momentum filter requires evidence that the spread has already begun
+    reverting toward its mean before an entry is taken.  This avoids
+    "catching falling knives" when the spread is still moving away from mean.
+
+    Momentum condition
+    ------------------
+    Short entry (z > +threshold): spread[-1] must be BELOW the short-term SMA
+        → spread is curling *down* toward mean.
+    Long  entry (z < -threshold): spread[-1] must be ABOVE the short-term SMA
+        → spread is curling *up* toward mean.
+
+    Parameters
+    ----------
+    zscore:
+        Current z-score of the spread.
+    spread_series:
+        Historical spread values up to and including the current bar.
+    threshold:
+        |z-score| required to consider an entry.
+    momentum_window:
+        Number of recent bars used to compute the short-term SMA (default 12).
 
     Returns
     -------
-    +1  long spread  (z < -threshold, spread below mean)
-    -1  short spread (z > +threshold, spread above mean)
-     0  no trade
+    +1  long spread  (z < -threshold AND spread > short-term SMA)
+    -1  short spread (z > +threshold AND spread < short-term SMA)
+     0  no trade (z-score insufficient OR momentum condition not met)
     """
+    spread_series = np.asarray(spread_series, dtype=float)
+    if len(spread_series) < 2:
+        return 0
+
+    current_spread: float = float(spread_series[-1])
+    window = min(momentum_window, len(spread_series))
+    sma: float = float(np.mean(spread_series[-window:]))
+
     if zscore > threshold:
-        return -1   # short spread: short y, long x
+        # Short spread: spread must be curling DOWN → current value below SMA
+        return -1 if current_spread < sma else 0
+
     if zscore < -threshold:
-        return 1    # long  spread: long  y, short x
+        # Long spread: spread must be curling UP → current value above SMA
+        return 1 if current_spread > sma else 0
+
     return 0
 
 

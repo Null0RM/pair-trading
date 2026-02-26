@@ -520,8 +520,13 @@ class BacktestEngine:
             return
 
         # Z-score and entry direction (prev-close spread)
+        # Momentum filter inside get_entry_direction requires spread_arr
         zscore = compute_zscore(spread_arr, window=self.lookback)
-        direction = get_entry_direction(zscore, threshold=self._z_entry)
+        direction = get_entry_direction(
+            zscore=zscore,
+            spread_series=spread_arr,
+            threshold=self._z_entry,
+        )
 
         if direction == 0:
             self._next_scan_idx = bar_idx + self.rescan_interval
