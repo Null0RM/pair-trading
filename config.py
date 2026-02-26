@@ -32,7 +32,7 @@ END_DATE: str   = "2022-12-31T23:59:59Z"   # Inclusive end for data fetch
 INITIAL_CAPITAL: float = 5_000.0           # USD — retail aggressive account
 LOOKBACK_WINDOW: int = 336                 # Hours used for rolling calibration (14 days)
 MIN_HISTORY: int = 500                     # Bars before the engine starts trading
-RESCAN_INTERVAL: int = 5                   # Bars between pair-scan attempts when flat
+RESCAN_INTERVAL: int = 24                  # Bars between pair-scan attempts when flat
 
 # ---------------------------------------------------------------------------
 # Strategy / signals
