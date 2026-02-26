@@ -197,7 +197,7 @@ def get_entry_direction(
     zscore: float,
     spread_series: np.ndarray,
     threshold: float = Z_ENTRY,
-    momentum_window: int = 12,
+    momentum_window: int = 6,
 ) -> int:
     """
     Determine trade direction from the z-score, gated by a momentum filter.
@@ -222,7 +222,7 @@ def get_entry_direction(
     threshold:
         |z-score| required to consider an entry.
     momentum_window:
-        Number of recent bars used to compute the short-term SMA (default 12).
+        Number of recent bars used to compute the short-term SMA (default 6).
 
     Returns
     -------

@@ -37,7 +37,7 @@ RESCAN_INTERVAL: int = 24                  # Bars between pair-scan attempts whe
 # ---------------------------------------------------------------------------
 # Strategy / signals
 # ---------------------------------------------------------------------------
-Z_ENTRY: float = 2.0                       # |z-score| required to open a trade
+Z_ENTRY: float = 1.75                      # |z-score| required to open a trade
 Z_EXIT: float = 0.25                       # |z-score| at which we take profit
 Z_STOP_LOSS: float = 4.0                   # |z-score| hard stop-loss (spread blow-up)
 TARGET_VOL: float = 0.45                   # Target annualised portfolio volatility (aggressive)
@@ -49,9 +49,9 @@ MAX_LEVERAGE: float = 3.0                  # Hard cap on notional / portfolio_va
 TRANSACTION_COST: float = 0.001            # 0.10 % per leg, applied on notional change
 HOURLY_FUNDING_RATE: float = 0.0000125     # Approx 0.01 % per 8 h funding fee per hour
 REBALANCE_THRESHOLD: float = 0.10          # Min fractional share deviation to trigger rebalance
-OU_HALFLIFE_MULTIPLIER: float = 2.0        # Time-stop multiplier on OU half-life
+OU_HALFLIFE_MULTIPLIER: float = 2.5        # Time-stop multiplier on OU half-life
 MIN_HALFLIFE: float = 2.0                  # Minimum half-life accepted (hours)
-MAX_HALFLIFE: float = 96.0                 # Maximum half-life cap (4 days in hours)
+MAX_HALFLIFE: float = 288.0                # Maximum half-life cap (12 days in hours)
 
 # ---------------------------------------------------------------------------
 # Cointegration filter
