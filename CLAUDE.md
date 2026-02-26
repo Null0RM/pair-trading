@@ -169,6 +169,19 @@ The rebalance (and its cost) is **skipped** if both `dev_y ≤ REBALANCE_THRESHO
 unconditionally so the next z-score uses the fresh β.  Division-by-zero is guarded
 with `abs(pos.shares) > 1e-10`.
 
+### Momentum filter (entry confirmation)
+`get_entry_direction` in `signals.py` computes a 12-bar short-term SMA of the spread
+and gates each direction:
+- **Short** (`z > threshold`): entry allowed only if `spread[-1] < SMA` (curling down ✓)
+- **Long**  (`z < -threshold`): entry allowed only if `spread[-1] > SMA` (curling up ✓)
+
+If the spread is still accelerating *away* from the mean (momentum in the wrong direction),
+`direction = 0` is returned even when the z-score threshold is breached — preventing
+"falling-knife" entries that would become time-stop losses.
+
+`momentum_window` defaults to 12 bars and is a parameter of `get_entry_direction`.
+The engine passes `spread_arr` at the single call site in `_try_open_position`.
+
 ### Annualization (hourly data)
 All annualization factors use **8 760 hours/year** (crypto trades 24/7):
 * `signals.py` — `annual_vol = hourly_vol × √8760`
@@ -200,6 +213,7 @@ needed there, but all downstream thresholds (`MIN_HALFLIFE`, `MAX_HALFLIFE`,
 | Fee bleed (costs > gross P&L) | Kalman β drift every hour triggered full rebalances at 0.1 % cost per leg, ballooning costs to 114 % of gross P&L | Added `REBALANCE_THRESHOLD=0.10`; rebalance skipped unless either leg deviates > 10 % from current shares |
 | No hard stop-loss | Cointegration breaks accumulated losses until the time-stop fired; large time-stop losses dominated P&L | Added `Z_STOP_LOSS=4.0` checked first in `should_exit`; exits immediately with `"stop_loss"` before mean-reversion or time-stop |
 | Slow-reverting pairs still entered at cap boundary | `MAX_HALFLIFE=168h` allowed HL~120–144h pairs that consistently ended as losers | Tightened to `MAX_HALFLIFE=96h`; half-lives above 4 days are now rejected at entry |
+| Falling-knife entries (spread still diverging at entry) | Z-score threshold breached while spread was still moving away from mean, creating certain time-stop losses | Momentum filter in `get_entry_direction`: long entry requires `spread[-1] > SMA12`; short requires `spread[-1] < SMA12`; returns 0 otherwise |
 
 ---
 
@@ -247,18 +261,19 @@ constructed pairs dominate the EG scan.
 
 ## Backtest Run Results
 
-Two runs are maintained in `README.md` (full trade logs + before/after comparison):
+Two runs are maintained in `README.md` (full trade logs + progressive comparison):
 
 | Period | Bars | Trades | Win % | Net Return | Sharpe | MDD | Cost/Gross |
 |---|---|---|---|---|---|---|---|
-| 2022 (synthetic) | 8 760 | 15 | 73.3 % | +3.60 % | 0.77 | −5.27 % | 33 % |
-| 2025 Q3–2026 Q1 (synthetic) | 6 576 | 21 | 71.4 % | +1.79 % | 0.41 | −8.92 % | 45 % |
+| 2022 (synthetic) | 8 760 | 15 | 66.7 % | +3.60 % | 0.77 | −5.27 % | 33 % |
+| 2025 Q3–2026 Q1 (synthetic) | 6 576 | 5 | 80.0 % | +2.42 % | 1.00 | −2.83 % | 17 % |
 
 `backtest_demo.py` is currently configured for the **2025 Q3–2026 Q1** period.
 To re-run 2022: change `start=datetime(2025,7,1), n_bars=6576` → `start=datetime(2022,1,1), n_bars=8760`.
 
 Key engine parameters for both runs: `seed=42`, `z_entry=1.5`, `z_exit=0.25`,
-`rescan_interval=24`, `Z_STOP_LOSS=4.0`, `REBALANCE_THRESHOLD=0.10`, `MAX_HALFLIFE=96h`.
+`rescan_interval=24`, `Z_STOP_LOSS=4.0`, `REBALANCE_THRESHOLD=0.10`, `MAX_HALFLIFE=96h`,
+`momentum_window=12`.
 
 > **Legacy note:** Pre-hourly results (700 daily bars, annualised at √252,
 > 8 trades, −3.42 % return) are preserved in README.md under

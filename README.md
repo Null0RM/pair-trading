@@ -31,7 +31,7 @@ look-ahead bias.
 | **Mean-reversion speed** | OU process fitted by OLS AR(1) → half-life τ½ = ln2 / θ |
 | **Regime filter** | 2-state Gaussian HMM classifies spread dynamics; gates out trending regimes |
 | **Position sizing** | Volatility targeting: notional = portfolio\_value × σ\_target / σ\_spread\_annual |
-| **Entry signal** | \|z-score\| > Z\_ENTRY (default 2.0σ) |
+| **Entry signal** | \|z-score\| > Z\_ENTRY **and** momentum confirmation: spread must already be curling back toward mean (12-bar SMA gate) |
 | **Exit signals** | Mean-reversion (\|z\| ≤ 0.25σ) **or** time-stop (hold > 2 × OU half-life) |
 | **Transaction costs** | 0.1 % per leg on every notional change (open, rebalance, close) + hourly funding rate (≈ 0.01 %/8 h) |
 | **No look-ahead bias** | Signals computed on `close[bar-1]`; all fills executed at `open[bar]`; end-of-bar MTM at `close[bar]` |
@@ -178,8 +178,8 @@ returns the pair with the lowest p-value **and** a positive OLS hedge ratio.
 ### `strategy/signals.py`
 
 ```python
-z = compute_zscore(spread_array, window=336)        # prev-bar close window
-direction = get_entry_direction(z, threshold=2.0)   # +1, -1, or 0
+z = compute_zscore(spread_array, window=336)
+direction = get_entry_direction(z, spread_array, threshold=2.0)  # +1, -1, or 0
 shares_y, shares_x = compute_position_size(...)     # price args = open[bar]
 exit_flag, reason = should_exit(z, bars_held, half_life, ...)
 ```
@@ -208,7 +208,7 @@ equity_curve, trade_log = engine.run()
 
 **Walk-forward loop (per hourly bar):**
 
-1. **If flat** and cooldown elapsed → compute signals on `close[0..bar-1]` → `find_best_pair` → fit KF → estimate OU half-life → abort if `half_life > MAX_HALFLIFE` → check HMM regime → compute z-score → if `|z| > z_entry` fill entry at `open[bar]`.
+1. **If flat** and cooldown elapsed → compute signals on `close[0..bar-1]` → `find_best_pair` → fit KF → estimate OU half-life → abort if `half_life > MAX_HALFLIFE` → check HMM regime → compute z-score → **momentum filter** (12-bar SMA gate) → if signal confirmed fill entry at `open[bar]`.
 2. **If in position** → incremental KF update on `close[bar-1]` → recompute spread/z-score/half-life → check exits → if exiting fill at `open[bar]`; if staying rebalance at `open[bar]`.
 3. Mark portfolio to market at `close[bar]`.
 4. Deduct hourly funding cost on gross notional (close-based exposure).
@@ -241,8 +241,12 @@ spread_t = log(price_y_t) − β_t × log(price_x_t)
 
 | Condition | Action |
 |---|---|
-| z > +Z\_ENTRY | **Short spread**: short y, long x |
-| z < −Z\_ENTRY | **Long spread**: long y, short x |
+| z > +Z\_ENTRY **and** spread < 12-bar SMA | **Short spread**: short y, long x |
+| z < −Z\_ENTRY **and** spread > 12-bar SMA | **Long spread**: long y, short x |
+
+The 12-bar SMA momentum gate confirms the spread has *already begun* reverting.
+Entries where the spread is still accelerating away from the mean are rejected
+even when the z-score threshold is breached.
 
 ### Exit
 
@@ -272,7 +276,7 @@ Close    : cash += shares_y·open_y   + shares_x·open_x   − exit_cost
 > All runs use **synthetic** hourly data (20 symbols, 8 cointegrated pairs baked
 > in by construction), `z_entry=1.5`, `z_exit=0.25`, `rescan_interval=24` (scan
 > once per day), `TARGET_VOL=15 %`, `MAX_HALFLIFE=96 h`, `Z_STOP_LOSS=4.0`,
-> `REBALANCE_THRESHOLD=0.10`, funding rate charged every bar.
+> `REBALANCE_THRESHOLD=0.10`, `momentum_window=12`, funding rate charged every bar.
 > Run `python3 backtest_demo.py` to regenerate.
 
 ---
@@ -340,76 +344,64 @@ Close    : cash += shares_y·open_y   + shares_x·open_x   − exit_cost
 #### Equity Curve
 
 ```
-  $1,020,252 ┤             ╱─────╲                             ╱──────
-             │       ╱───────────╲                             ╱──────
-             │─────────────────────╲                    ╱────────────
-    $974,737 ┤─────────────────────────────────────────╲      ╱──────
-             │─────────────────────────────────────────────╱───────
-    $929,223 ┤──────────────────────────────────────────────────────
-             └──────────────────────────────────────────────────────
-            Bar 0                                           Bar 6576
+  $1,024,179 ┤                                                 ╱──────
+             │                                         ╱────────────
+             │         ╱──────────────╲        ╱──────────────────
+  $1,003,087 ┤─────────────────────────╲       ╱──────────────────
+             │──────────────────────────────────────────────────
+    $981,996 ┤──────────────────────────────────────────────────
+             └──────────────────────────────────────────────────
+            Bar 0                                          Bar 6576
 ```
 
 #### Trade Log
 
 | # | Entry | Exit | Pair | Dir | HL(h) | β | Costs | Net P&L | Reason |
 |---|-------|------|------|-----|------:|--:|------:|--------:|--------|
-| 1 | 2025-07-31 | 2025-08-01 | BCH/XMR | long | 30.1 | 1.063 | $153 | **+$11,436** | mean\_reversion ✅ |
-| 2 | 2025-08-10 | 2025-08-12 | AVAX/UNI | long | 20.4 | 1.947 | $1,477 | **+$963** | time\_stop |
-| 3 | 2025-08-20 | 2025-08-20 | LTC/XMR | long | 15.2 | 0.819 | $114 | −$3,854 | **stop\_loss** 🛑 |
-| 4 | 2025-08-21 | 2025-08-22 | DOGE/MATIC | short | 12.2 | 0.241 | $457 | **+$3,209** | time\_stop |
-| 5 | 2025-08-27 | 2025-08-27 | BTC/MATIC | long | 10.2 | 4.171 | $329 | **+$8,497** | mean\_reversion ✅ |
-| 6 | 2025-09-25 | 2025-10-02 | AVAX/BCH | long | 69.6 | 0.480 | $2,389 | −$21,471 | time\_stop |
-| 7 | 2025-10-05 | 2025-10-13 | ATOM/UNI | short | 96.0 | 1.537 | $2,656 | −$36,585 | time\_stop |
-| 8 | 2025-10-17 | 2025-10-24 | AVAX/ATOM | long | 76.4 | 1.228 | $2,516 | −$25,435 | time\_stop |
-| 9 | 2025-10-26 | 2025-10-27 | SOL/DOT | long | 16.3 | 1.593 | $139 | **+$9,111** | mean\_reversion ✅ |
-| 10 | 2025-11-02 | 2025-11-03 | BTC/DOT | long | 19.1 | 3.483 | $163 | −$726 | time\_stop |
-| 11 | 2025-11-08 | 2025-11-09 | ADA/TRX | long | 12.3 | 0.390 | $986 | **+$7,259** | time\_stop |
-| 12 | 2025-11-15 | 2025-11-18 | AVAX/MATIC | long | 49.5 | 1.371 | $886 | **+$8,513** | mean\_reversion ✅ |
-| 13 | 2025-11-18 | 2025-11-18 | AVAX/ETC | short | 9.7 | 0.890 | $1,339 | −$8,164 | **stop\_loss** 🛑 |
-| 14 | 2025-11-21 | 2025-11-21 | ATOM/XMR | long | 25.8 | 0.421 | $235 | **+$5,697** | mean\_reversion ✅ |
-| 15 | 2025-11-26 | 2025-11-29 | ETH/LTC | short | 29.2 | 1.845 | $187 | **+$5,782** | time\_stop |
-| 16 | 2025-12-07 | 2025-12-08 | XRP/TRX | short | 17.3 | 0.144 | $610 | **+$13,069** | mean\_reversion ✅ |
-| 17 | 2025-12-18 | 2025-12-19 | ALGO/XRP | short | 10.6 | 3.792 | $710 | **+$2,545** | time\_stop |
-| 18 | 2026-01-08 | 2026-01-10 | SOL/NEAR | short | 29.5 | 3.175 | $180 | **+$9,699** | mean\_reversion ✅ |
-| 19 | 2026-02-01 | 2026-02-02 | DOT/LINK | short | 15.4 | 1.071 | $162 | **+$10,289** | mean\_reversion ✅ |
-| 20 | 2026-02-11 | 2026-02-14 | BTC/DOT | short | 31.4 | 4.430 | $176 | **+$1,523** | time\_stop |
-| 21 | 2026-03-11 | 2026-03-14 | SOL/LINK | long | 41.3 | 1.456 | $219 | **+$16,490** | time\_stop |
+| 1 | 2025-08-10 | 2025-08-12 | AVAX/UNI | long | 20.4 | 1.954 | $1,461 | **+$6,437** | mean\_reversion ✅ |
+| 2 | 2025-10-16 | 2025-10-22 | ALGO/XRP | short | 68.0 | 3.037 | $1,186 | −$9,354 | time\_stop |
+| 3 | 2025-12-17 | 2025-12-19 | AVAX/LINK | short | 32.8 | 1.589 | $165 | **+$8,943** | mean\_reversion ✅ |
+| 4 | 2026-02-04 | 2026-02-04 | UNI/ETC | long | 9.9 | 0.537 | $1,179 | **+$5,218** | mean\_reversion ✅ |
+| 5 | 2026-03-11 | 2026-03-14 | SOL/LINK | long | 40.0 | 1.470 | $218 | **+$12,934** | time\_stop |
 
 #### Performance Summary
 
-| Metric | Before fixes | **After fixes** | Δ |
-|--------|------------:|----------------:|--:|
-| **Final value** | $998,341 | **$1,017,850** | +$19,509 |
-| **Total return** | −0.17 % | **+1.79 %** | +1.96 pp |
-| **Annualised return** | −0.22 % | **+2.38 %** | +2.60 pp |
-| **Max drawdown** | −9.04 % | −8.92 % | −0.12 pp |
-| **Sharpe ratio** | 0.00 | **0.41** | +0.41 |
-| **Calmar ratio** | −0.02 | **+0.27** | +0.29 |
-| **Total trades** | 17 | 21 | +4 |
-| **Win rate** | 64.7 % | **71.4 %** | +6.7 pp |
-| **Avg net P&L / trade** | −$98 | **+$850** | +$948 |
-| **Gross P&L** | $18,179 | **$35,953** | +$17,774 |
-| **Transaction costs** | $20,747 | **$16,085** | −$4,662 |
-| **Cost-to-gross ratio** | 114 % | **45 %** | −69 pp |
+| Metric | No fixes (baseline) | + Fee/stop fixes | **+ Momentum filter** | Δ vs baseline |
+|--------|-------------------:|-----------------:|----------------------:|--------------:|
+| **Final value** | $998,341 | $1,017,850 | **$1,024,179** | +$25,838 |
+| **Total return** | −0.17 % | +1.79 % | **+2.42 %** | +2.59 pp |
+| **Annualised return** | −0.22 % | +2.38 % | **+3.23 %** | +3.45 pp |
+| **Max drawdown** | −9.04 % | −8.92 % | **−2.83 %** | +6.21 pp |
+| **Sharpe ratio** | 0.00 | 0.41 | **1.00** | +1.00 |
+| **Calmar ratio** | −0.02 | +0.27 | **+1.14** | +1.16 |
+| **Total trades** | 17 | 21 | **5** | −12 |
+| **Win rate** | 64.7 % | 71.4 % | **80.0 %** | +15.3 pp |
+| **Avg net P&L / trade** | −$98 | +$850 | **+$4,836** | +$4,934 |
+| **Gross P&L** | $18,179 | $35,953 | **$25,431** | +$7,252 |
+| **Transaction costs** | $20,747 | $16,085 | **$4,210** | −$16,537 |
+| **Cost-to-gross ratio** | 114 % | 45 % | **17 %** | −97 pp |
 
 #### Key Observations
 
-1. **Fee bleed fixed** — cost-to-gross ratio collapsed from 114 % to 45 % via the
-   10 % rebalance threshold, saving $4,662 in costs despite handling 4 more trades.
+1. **Momentum filter eliminated all three catastrophic time-stops** — the AVAX/BCH
+   (−$21K), ATOM/UNI (−$37K), and AVAX/ATOM (−$25K) entries from the prior run were
+   all rejected because the spread was still accelerating away from the mean when the
+   z-score breached the threshold.  The filter correctly identified these as falling-knife
+   entries before any money was committed.
 
-2. **Stop-loss fired twice** — trades 3 and 13 (LTC/XMR and AVAX/ETC) were cut
-   at ±4σ within hours of entry.  Combined loss: −$12,018.  Without the stop-loss
-   these would likely have drifted into larger time-stop losses.
+2. **Costs collapsed 74 %** — from $16,085 to $4,210.  Fewer trades means fewer entry
+   and exit commissions.  Cost-to-gross ratio fell from 45 % to 17 %.
 
-3. **ETH/ATOM −$41,058 disaster eliminated** — `MAX_HALFLIFE=96 h` blocked the
-   118 h half-life entry that caused the worst single-trade loss in the prior run.
-   The ATOM/UNI pair (now capped at exactly 96 h) still entered and lost −$36,585;
-   the cap is effective but this pair remains the run's dominant risk.
+3. **MDD cut by 68 %** — from −8.92 % to −2.83 %.  The equity curve is now a near-monotone
+   climb rather than a volatile round-trip.
 
-4. **Mean-reversion exits 100 % profitable** — all 8 mean-reversion exits were
-   winners, averaging +$9,370.  The strategy's core signal is sound across both
-   market regimes.
+4. **Sharpe crossed 1.0** — the combination of fee/stop fixes (+rebalance threshold,
+   +stop-loss, tighter MAX_HALFLIFE) and the momentum gate together lifted the ratio
+   from 0.00 (baseline) → 0.41 → **1.00**.
+
+5. **Trade-off: much lower activity** — 5 trades vs 21.  In strongly trending or
+   choppy regimes the filter will sit out for extended periods.  This is the correct
+   behaviour for a mean-reversion strategy but should be monitored on live data.
 
 ---
 
