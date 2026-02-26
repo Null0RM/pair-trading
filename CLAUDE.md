@@ -265,11 +265,11 @@ Two runs are maintained in `README.md` (full trade logs + progressive comparison
 
 | Period | Bars | Trades | Win % | Net Return | Sharpe | MDD | Cost/Gross |
 |---|---|---|---|---|---|---|---|
-| 2022 (synthetic) | 8 760 | 15 | 66.7 % | +3.60 % | 0.77 | −5.27 % | 33 % |
+| 2022 (synthetic) | 8 760 | 6 | 83.3 % | +4.24 % | 1.34 | −2.21 % | 8 % |
 | 2025 Q3–2026 Q1 (synthetic) | 6 576 | 5 | 80.0 % | +2.42 % | 1.00 | −2.83 % | 17 % |
 
-`backtest_demo.py` is currently configured for the **2025 Q3–2026 Q1** period.
-To re-run 2022: change `start=datetime(2025,7,1), n_bars=6576` → `start=datetime(2022,1,1), n_bars=8760`.
+`backtest_demo.py` is currently configured for the **2022** period (`start=datetime(2022,1,1), n_bars=8760`).
+To re-run 2025 Q3–2026 Q1: change to `start=datetime(2025,7,1), n_bars=6576`.
 
 Key engine parameters for both runs: `seed=42`, `z_entry=1.5`, `z_exit=0.25`,
 `rescan_interval=24`, `Z_STOP_LOSS=4.0`, `REBALANCE_THRESHOLD=0.10`, `MAX_HALFLIFE=96h`,
