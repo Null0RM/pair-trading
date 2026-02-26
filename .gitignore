@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# Backtest outputs (generated at runtime)
+trade_log.csv
+equity_curve.csv
+backtest.log
+
+# Misc
+repomix-output.xml
+.DS_Store
