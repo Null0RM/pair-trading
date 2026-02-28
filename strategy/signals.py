@@ -52,7 +52,7 @@ import numpy as np
 from config import (
     LOOKBACK_WINDOW,
     MAX_LEVERAGE,
-    TARGET_VOL,
+    MAX_TARGET_VOL,
     Z_ENTRY,
     Z_EXIT,
 )
@@ -121,7 +121,7 @@ def compute_position_size(
     price_x: float,
     hedge_ratio: float,
     direction: int,
-    target_vol: float = TARGET_VOL,
+    target_vol: float = MAX_TARGET_VOL,
     max_leverage: float = MAX_LEVERAGE,
     window: int = LOOKBACK_WINDOW,
 ) -> tuple[float, float]:
@@ -197,7 +197,7 @@ def get_entry_direction(
     zscore: float,
     spread_series: np.ndarray,
     threshold: float = Z_ENTRY,
-    momentum_window: int = 6,
+    momentum_window: int = 4,
 ) -> int:
     """
     Determine trade direction from the z-score, gated by a momentum filter.
@@ -222,7 +222,7 @@ def get_entry_direction(
     threshold:
         |z-score| required to consider an entry.
     momentum_window:
-        Number of recent bars used to compute the short-term SMA (default 6).
+        Number of recent bars used to compute the short-term SMA (default 4).
 
     Returns
     -------

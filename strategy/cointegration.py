@@ -83,6 +83,15 @@ def find_best_pair(
         y_raw = arrays[sym_y]
         x_raw = arrays[sym_x]
 
+        # If series have different lengths (sparse data in multi-year runs),
+        # align by index intersection before applying the finite mask.
+        if len(y_raw) != len(x_raw):
+            idx = log_price_data[sym_y].index.intersection(log_price_data[sym_x].index)
+            if len(idx) < min_observations:
+                continue
+            y_raw = log_price_data[sym_y].loc[idx].values
+            x_raw = log_price_data[sym_x].loc[idx].values
+
         # Boolean mask: retain only rows where both values are finite
         mask = np.isfinite(y_raw) & np.isfinite(x_raw)
         y = y_raw[mask]

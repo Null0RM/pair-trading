@@ -92,9 +92,10 @@ prints results to stdout.  Output files are written to the current directory.
 python3 main.py
 ```
 
-Fetches ~6 months of hourly OHLCV (1h bars, `SINCE_DAYS=180`) for the
-top-40 crypto assets, then runs the walk-forward backtest.  Expect the data
-fetch to take 5–10 minutes due to exchange rate limits and bar count.
+Fetches hourly OHLCV for the 29 curated symbols between `START_DATE` and
+`END_DATE` (currently 2022–2025, ~35k bars per symbol), then runs the
+walk-forward backtest.  Expect the data fetch to take 10–15 minutes and
+the engine loop ~2–3 hours due to the 4-year span.
 
 ---
 
@@ -273,11 +274,9 @@ Close    : cash += shares_y·open_y   + shares_x·open_x   − exit_cost
 
 ## Backtest Results
 
-> All runs use **synthetic** hourly data (20 symbols, 8 cointegrated pairs baked
-> in by construction), `z_entry=1.5`, `z_exit=0.25`, `rescan_interval=24` (scan
-> once per day), `TARGET_VOL=15 %`, `MAX_HALFLIFE=96 h`, `Z_STOP_LOSS=4.0`,
-> `REBALANCE_THRESHOLD=0.10`, `momentum_window=12`, funding rate charged every bar.
-> Run `python3 backtest_demo.py` to regenerate.
+> Runs 1–2 use **synthetic** hourly data (20 symbols, 8 cointegrated pairs baked
+> in by construction). Runs 3–4 use **real Binance data** fetched via CCXT.
+> All runs charge 0.1 % per leg + hourly funding rate every bar.
 
 ---
 
@@ -403,34 +402,220 @@ Close    : cash += shares_y·open_y   + shares_x·open_x   − exit_cost
 
 ---
 
+### Run 3 — 2022–2025 Hyper-Aggressive (Real Binance Data)
+
+**35,063 hourly bars · 500-bar warm-up · 29 curated symbols · $5,000 initial capital**
+
+Config: `Z_ENTRY=1.5`, static `TARGET_VOL=60 %`, `MAX_LEVERAGE=4.0`, `RESCAN_INTERVAL=12`,
+`MAX_HALFLIFE=288 h`, `OU_HALFLIFE_MULTIPLIER=2.5`, `momentum_window=4`.
+
+#### Performance Summary
+
+| Metric | Value |
+|---|---|
+| **Initial capital** | $5,000.00 |
+| **Final portfolio value** | $4,121.72 |
+| **Total return** | **−17.57 %** |
+| **Annualised return** | −4.71 % |
+| **Max drawdown** | −50.72 % |
+| **Sharpe ratio** | −0.04 |
+| **Calmar ratio** | −0.09 |
+| **Total trades** | 63 |
+| **Win rate** | 61.9 % |
+| **Avg net P&L / trade** | −$13.94 |
+| **Avg hold (bars)** | 95.7 h |
+| **Total gross P&L** | $1,350.78 |
+| **Total transaction costs** | $1,194.66 |
+| **Cost-to-gross ratio** | **88.4 %** |
+
+#### Breakdown by Year
+
+| Year | Trades | Net P&L | Win Rate |
+|------|-------:|--------:|---------:|
+| 2022 | 16 | −$761 | 75.0 % |
+| 2023 | 17 | −$935 | 58.8 % |
+| 2024 | 19 | +$57 | 52.6 % |
+| 2025 | 11 | +$761 | 63.6 % |
+
+#### Breakdown by Exit Reason
+
+| Reason | Trades | Net P&L | Avg / trade |
+|--------|-------:|--------:|------------:|
+| `mean_reversion` ✅ | 33 | +$3,669 | +$111 |
+| `time_stop` ⏱ | 26 | −$2,390 | −$92 |
+| `stop_loss` ❌ | 4 | −$2,158 | −$539 |
+
+#### Notable Trades
+
+**Best:**
+
+| # | Entry | Exit | Pair | Net P&L | Reason |
+|---|-------|------|------|--------:|--------|
+| 54 | 2025-01-18 | 2025-01-19 | VET/EOS | **+$241** | mean\_reversion ✅ |
+| 61 | 2025-10-28 | 2025-10-30 | BTC/LTC | **+$205** | time\_stop |
+| 1  | 2022-02-05 | 2022-02-08 | LTC/DOT | **+$205** | mean\_reversion ✅ |
+
+**Worst:**
+
+| # | Entry | Exit | Pair | Net P&L | Reason |
+|---|-------|------|------|--------:|--------|
+| 6  | 2022-05-04 | 2022-05-11 | ICP/MANA | **−$1,185** | stop\_loss ❌ |
+| 17 | 2023-01-05 | 2023-01-20 | ETH/SOL  | **−$847**  | time\_stop ⏱ |
+| 43 | 2024-06-09 | 2024-06-20 | ETH/NEAR | **−$555**  | time\_stop ⏱ |
+
+#### Key Observations
+
+1. **Costs consumed 88 % of gross P&L** — with `Z_ENTRY=1.5` and `RESCAN_INTERVAL=12`
+   the engine opened 63 trades at an average cost of $19/trade. Combined with
+   high-leverage notionals (`TARGET_VOL=60 %`, `MAX_LEVERAGE=4.0`), the funding
+   and commission drag wiped out almost all gross profits.
+
+2. **Four stop-losses averaged −$539 each** — the looser `momentum_window=4` and
+   wider `MAX_HALFLIFE=288 h` accepted pairs with fragile cointegration, leading to
+   structural breaks caught by the `Z_STOP_LOSS=4.0` hard stop.  These four trades
+   alone account for −$2,158 of the total loss.
+
+3. **Mean-reversion exits were still profitable (+$3,669)** — confirming the core
+   signal is valid; the problem is purely over-trading and excessive sizing eroding
+   returns through costs and catastrophic stops.
+
+4. **Equity curve reached −50 % MDD** — the 2022–2023 bear market hit high-leverage
+   short-vol spreads hard; the ICP/MANA stop-loss (−$1,185 in May 2022, the LUNA
+   crash period) and ETH/SOL time-stop (−$847 in Jan 2023) together dropped the
+   account from $5,000 to under $3,000 by mid-2023.
+
+5. **Conclusion — the 2022-only run with conservative settings remains superior**:
+   6 trades / +5.19 % / Sharpe 0.46 vs 63 trades / −17.57 % / Sharpe −0.04.
+   For this mean-reversion strategy, *fewer, higher-quality entries* consistently
+   outperform high-frequency aggressive setups.
+
+---
+
+### Run 4 — 2022–2025 Dynamic Volatility Targeting (Real Binance Data)
+
+**35,063 hourly bars · 500-bar warm-up · 29 curated symbols · $5,000 initial capital**
+
+Same universe and entry parameters as Run 3, with `TARGET_VOL` replaced by a
+half-life-scaled dynamic target:
+
+```
+dynamic_target_vol = MAX_TARGET_VOL × (BASELINE_HALFLIFE / max(HL, BASELINE_HALFLIFE))
+                   = 0.60 × (48h / max(HL, 48h))
+clamped to [MIN_TARGET_VOL=0.15, MAX_TARGET_VOL=0.60]
+```
+
+Fast-reverting pairs (HL ≤ 48 h) → 60 % vol.  Slow pairs (HL = 288 h) → 15 % vol.
+
+#### Performance Summary — Run 3 vs Run 4
+
+| Metric | Run 3 — Static 60 % | **Run 4 — Dynamic Vol** | Δ |
+|---|---:|---:|---:|
+| **Final portfolio value** | $4,121.72 | **$3,370.56** | −$751 |
+| **Total return** | −17.57 % | **−32.59 %** | −15.0 pp |
+| **Annualised return** | −4.71 % | −9.38 % | −4.7 pp |
+| **Max drawdown** | −50.72 % | **−46.11 %** | +4.6 pp ✅ |
+| **Sharpe ratio** | −0.04 | −0.46 | −0.42 |
+| **Calmar ratio** | −0.09 | −0.20 | −0.11 |
+| **Total trades** | 63 | 63 | — |
+| **Win rate** | 61.9 % | **52.4 %** | −9.5 pp |
+| **Avg net P&L / trade** | −$13.94 | −$25.86 | −$11.92 |
+| **Total gross P&L** | $1,350.78 | $2,627.81 | +$1,277 |
+| **Total transaction costs** | $1,194.66 | $1,529.44 | +$334 |
+| **Cost-to-gross ratio** | 88.4 % | **58.2 %** | −30.2 pp ✅ |
+
+#### Breakdown by Year
+
+| Year | Trades | Net P&L | Win Rate |
+|------|-------:|--------:|---------:|
+| 2022 | 16 | −$607 | 50.0 % |
+| 2023 | 17 | −$689 | 52.9 % |
+| 2024 | 19 | −$341 | 52.6 % |
+| 2025 | 11 | +$8 | 54.5 % |
+
+#### Breakdown by Exit Reason
+
+| Reason | Trades | Net P&L | Avg / trade |
+|--------|-------:|--------:|------------:|
+| `mean_reversion` ✅ | 33 | +$1,765 | +$53 |
+| `time_stop` ⏱ | 26 | −$1,946 | −$75 |
+| `stop_loss` ❌ | 4 | −$1,449 | −$362 |
+
+#### Worst Trades (with Dynamic tvol)
+
+| Entry | Pair | HL (h) | tvol | Net P&L | Reason |
+|-------|------|-------:|-----:|--------:|--------|
+| 2022-05-04 | ICP/MANA | 288.0 h | 15 % | −$459 | stop\_loss ❌ |
+| 2023-09-30 | ETH/ETC | 101.3 h | 28 % | −$403 | stop\_loss ❌ |
+| 2023-12-05 | VET/EOS | 288.0 h | 15 % | −$334 | stop\_loss ❌ |
+| 2023-01-05 | ETH/SOL | 135.3 h | 21 % | −$283 | time\_stop ⏱ |
+| 2023-04-19 | XRP/VET | 7.8 h | **60 %** | −$252 | stop\_loss ❌ |
+
+#### Key Observations
+
+1. **DVT reduced stop-loss damage but demolished mean-reversion profits** — stop-losses
+   fell from −$2,158 to −$1,449 (−33 %) because slow-reverting pairs (HL=288h) were
+   sized at only 15 % vol.  But the 33 mean-reversion wins also shrank dramatically:
+   +$3,669 → +$1,765 (−52 %), because many of the best winners (DOT/AAVE, DOGE/XLM,
+   VET/EOS) had long half-lives and were starved of notional.  Net effect: −15 pp return.
+
+2. **`BASELINE_HALFLIFE=48h` rewarded the wrong pairs** — the formula grants maximum
+   leverage to fast-reverting pairs (HL < 48 h).  But in this universe, short half-lives
+   correlate with *high spread volatility*, not safety: XRP/VET (HL=7.8 h) received 60 %
+   vol and hit a stop-loss at −$252.  The intuition behind DVT — "fast = safer" — is
+   inverted for crypto spreads during volatile regimes.
+
+3. **Cost-to-gross ratio improved (+30 pp)** — DVT did successfully shift notional away
+   from high-cost slow trades.  Gross P&L nearly doubled ($1,350 → $2,628) because
+   fast-reverting trades were sized larger, generating more raw spread P&L, while costs
+   only rose 28 %.  The problem is those same high-leverage fast trades also generated
+   more losses when they misfired.
+
+4. **Win rate fell 9 pp (62 % → 52 %)** — DVT upsized fast trades (full 60 % vol) that
+   were borderline losers at smaller sizes, tipping them across the break-even threshold.
+   Simultaneously, it downsized marginally profitable slow trades, turning small wins
+   into small losses after costs.
+
+5. **MDD improved slightly (−50.7 % → −46.1 %)** — the only metric where DVT
+   outperformed.  Defensive sizing on the worst slow-reverting stop-loss trades
+   (ICP/MANA: −$1,185 → −$459, VET/EOS: −$381 → −$334) softened the 2022–2023
+   drawdown peak, confirming that the protective intent of DVT is sound in principle.
+
+6. **Conclusion** — the DVT formula as implemented is sensitive to the `BASELINE_HALFLIFE`
+   assumption.  A higher baseline (e.g. 144–192 h) would flip the scaling direction:
+   treating medium-speed pairs as the "normal" case and applying maximum leverage only to
+   the fastest, most reliably mean-reverting spreads identified in back-testing.
+
+---
+
 ## Configuration
 
 All parameters live in `config.py`.  Key knobs:
 
 ```python
-# Universe
-TOP_40_SYMBOLS      = [...]          # 40 Binance spot pairs
-TIMEFRAME           = "1h"           # hourly bars
-SINCE_DAYS          = 180            # calendar days of history to fetch
+# Universe (29 curated 2022-safe liquid coins; see config.py)
+TOP_40_SYMBOLS      = [...]
+TIMEFRAME           = "1h"
+START_DATE          = "2022-01-01T00:00:00Z"   # inclusive fetch start
+END_DATE            = "2025-12-31T23:59:59Z"   # inclusive fetch end
 
 # Calibration
 LOOKBACK_WINDOW     = 336            # bars for rolling KF + EG scan (14 days × 24 h)
 MIN_HISTORY         = 500            # warm-up bars before first trade
-RESCAN_INTERVAL     = 5              # bars between pair-scans when flat
+RESCAN_INTERVAL     = 12             # bars between pair-scans when flat
 
 # Strategy
-Z_ENTRY             = 2.0            # entry gate (|z-score|)
+Z_ENTRY             = 1.5            # entry gate (|z-score|)
 Z_EXIT              = 0.25           # profit-take gate
 Z_STOP_LOSS         = 4.0            # hard stop — exit if |z| blows out above this
-TARGET_VOL          = 0.15           # 15 % annual vol target (annualised at √8760)
+TARGET_VOL          = 0.60           # 60 % annual vol target (annualised at √8760)
 TRANSACTION_COST    = 0.001          # 0.1 % per leg per change
 HOURLY_FUNDING_RATE = 0.0000125      # ≈ 0.01 % per 8 h, charged every bar
 
 # Risk
-OU_HALFLIFE_MULTIPLIER = 2.0         # time-stop = 2 × half-life (in hours)
+OU_HALFLIFE_MULTIPLIER = 2.5         # time-stop = 2.5 × half-life (in hours)
 MIN_HALFLIFE        = 2              # floor on OU half-life (hours)
-MAX_HALFLIFE        = 96             # hard cap — entries aborted above this (4 days)
-MAX_LEVERAGE        = 2.0            # notional / portfolio cap
+MAX_HALFLIFE        = 288            # hard cap — entries aborted above this (12 days)
+MAX_LEVERAGE        = 4.0            # notional / portfolio cap
 REBALANCE_THRESHOLD = 0.10           # min fractional leg deviation to trigger a rebalance
 
 # Models

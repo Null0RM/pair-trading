@@ -182,6 +182,22 @@ If the spread is still accelerating *away* from the mean (momentum in the wrong 
 `momentum_window` defaults to 12 bars and is a parameter of `get_entry_direction`.
 The engine passes `spread_arr` at the single call site in `_try_open_position`.
 
+### Dynamic Volatility Targeting (DVT)
+`compute_position_size` in `signals.py` accepts an explicit `target_vol` parameter.
+The engine computes it at every open and rebalance:
+```
+dynamic_target_vol = MAX_TARGET_VOL × (BASELINE_HALFLIFE / max(HL, BASELINE_HALFLIFE))
+                   = 0.60 × (48 / max(HL, 48))
+clamped to [MIN_TARGET_VOL=0.15, MAX_TARGET_VOL=0.60]
+```
+The OPEN log line now includes `tvol=XX%` so each trade's leverage is visible.
+
+**Empirical finding (Run 4):** `BASELINE_HALFLIFE=48h` underperformed static 60 % vol
+(−32.6 % vs −17.6 % return) because short HL correlates with *higher* spread volatility
+in the 2022–2025 crypto universe — the opposite of the formula's assumption.  Stop-losses
+shrank −33 % but mean-reversion profits fell −52 %.  A higher BASELINE_HALFLIFE
+(e.g. 144–192 h) would reduce leverage on fast, volatile pairs instead.
+
 ### Annualization (hourly data)
 All annualization factors use **8 760 hours/year** (crypto trades 24/7):
 * `signals.py` — `annual_vol = hourly_vol × √8760`
@@ -214,6 +230,7 @@ needed there, but all downstream thresholds (`MIN_HALFLIFE`, `MAX_HALFLIFE`,
 | No hard stop-loss | Cointegration breaks accumulated losses until the time-stop fired; large time-stop losses dominated P&L | Added `Z_STOP_LOSS=4.0` checked first in `should_exit`; exits immediately with `"stop_loss"` before mean-reversion or time-stop |
 | Slow-reverting pairs still entered at cap boundary | `MAX_HALFLIFE=168h` allowed HL~120–144h pairs that consistently ended as losers | Tightened to `MAX_HALFLIFE=96h`; half-lives above 4 days are now rejected at entry |
 | Falling-knife entries (spread still diverging at entry) | Z-score threshold breached while spread was still moving away from mean, creating certain time-stop losses | Momentum filter in `get_entry_direction`: long entry requires `spread[-1] > SMA12`; short requires `spread[-1] < SMA12`; returns 0 otherwise |
+| `ValueError: shapes (336,) (332,)` in `find_best_pair` | numpy boolean mask assumed all series share the same index, but multi-year runs have symbols with missing bars → different array lengths | Added length-mismatch guard in `cointegration.py`: when `len(y_raw) != len(x_raw)`, align via `index.intersection()` before applying the `np.isfinite` mask |
 
 ---
 
@@ -261,19 +278,32 @@ constructed pairs dominate the EG scan.
 
 ## Backtest Run Results
 
-Two runs are maintained in `README.md` (full trade logs + progressive comparison):
+Four runs documented in `README.md` (full trade logs + comparisons):
 
-| Period | Bars | Trades | Win % | Net Return | Sharpe | MDD | Cost/Gross |
-|---|---|---|---|---|---|---|---|
-| 2022 (synthetic) | 8 760 | 6 | 83.3 % | +4.24 % | 1.34 | −2.21 % | 8 % |
-| 2025 Q3–2026 Q1 (synthetic) | 6 576 | 5 | 80.0 % | +2.42 % | 1.00 | −2.83 % | 17 % |
+| Period | Data | Capital | Bars | Trades | Win % | Net Return | Sharpe | MDD | Cost/Gross |
+|---|---|---|---|---|---|---|---|---|---|
+| 2022 (synthetic) | synthetic | $1M | 8 760 | 6 | 83.3 % | +4.24 % | 1.34 | −2.21 % | 8 % |
+| 2025 Q3–2026 Q1 (synthetic) | synthetic | $1M | 6 576 | 5 | 80.0 % | +2.42 % | 1.00 | −2.83 % | 17 % |
+| 2022–2025 hyper-aggressive | **real Binance** | $5K | 35 063 | 63 | 61.9 % | −17.57 % | −0.04 | −50.72 % | 88 % |
+| 2022–2025 dynamic vol target | **real Binance** | $5K | 35 063 | 63 | 52.4 % | −32.59 % | −0.46 | −46.11 % | 58 % |
 
 `backtest_demo.py` is currently configured for the **2022** period (`start=datetime(2022,1,1), n_bars=8760`).
 To re-run 2025 Q3–2026 Q1: change to `start=datetime(2025,7,1), n_bars=6576`.
 
-Key engine parameters for both runs: `seed=42`, `z_entry=1.5`, `z_exit=0.25`,
+Key engine parameters for synthetic runs: `seed=42`, `z_entry=1.5`, `z_exit=0.25`,
 `rescan_interval=24`, `Z_STOP_LOSS=4.0`, `REBALANCE_THRESHOLD=0.10`, `MAX_HALFLIFE=96h`,
 `momentum_window=12`.
+
+**Run 3 (real data, static vol) parameters:** `Z_ENTRY=1.5`, static `TARGET_VOL=0.60`,
+`MAX_LEVERAGE=4.0`, `RESCAN_INTERVAL=12`, `MAX_HALFLIFE=288h`, `OU_HALFLIFE_MULTIPLIER=2.5`,
+`momentum_window=4`. Result: 88 % cost/gross, stop-losses avg −$539.
+
+**Run 4 (real data, dynamic vol) parameters:** same as Run 3 but `TARGET_VOL` replaced
+by `dynamic_target_vol = 0.60 × (48h / max(HL, 48h))`, clamped to [0.15, 0.60].
+Result: DVT reduced stop-loss magnitude (−33 %) but also cut mean-reversion profits
+(−52 %), net worsening return by 15 pp. The BASELINE_HALFLIFE=48h assumption proved
+incorrect — short HL correlates with *higher* spread volatility, not safety, in this
+crypto universe. MDD improved slightly (−50.7 % → −46.1 %).
 
 > **Legacy note:** Pre-hourly results (700 daily bars, annualised at √252,
 > 8 trades, −3.42 % return) are preserved in README.md under

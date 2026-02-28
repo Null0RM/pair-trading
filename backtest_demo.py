@@ -87,7 +87,7 @@ def generate_universe(n_bars: int = 8760, seed: int = 42) -> dict[str, pd.DataFr
     rng = np.random.default_rng(seed)
 
     dates = pd.date_range(
-        start=datetime(2025, 7, 1, tzinfo=timezone.utc),
+        start=datetime(2022, 1, 1, tzinfo=timezone.utc),
         periods=n_bars,
         freq="h",
     )
@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
     # 1. Generate data
     print("\n[1/3]  Generating synthetic hourly universe …")
-    raw_data = generate_universe(n_bars=6576, seed=42)
+    raw_data = generate_universe(n_bars=8760, seed=42)
 
     # 2. Run engine (scan every flat bar — maximise opportunity capture)
     print("[2/3]  Running walk-forward backtest …\n")
