@@ -278,14 +278,15 @@ constructed pairs dominate the EG scan.
 
 ## Backtest Run Results
 
-Four runs documented in `README.md` (full trade logs + comparisons):
+Five runs documented in `README.md` (full trade logs + comparisons):
 
-| Period | Data | Capital | Bars | Trades | Win % | Net Return | Sharpe | MDD | Cost/Gross |
+| Period | Data | Capital | Bars | Trades | Win % | Net Return | Sharpe | MDD | Stops |
 |---|---|---|---|---|---|---|---|---|---|
-| 2022 (synthetic) | synthetic | $1M | 8 760 | 6 | 83.3 % | +4.24 % | 1.34 | −2.21 % | 8 % |
-| 2025 Q3–2026 Q1 (synthetic) | synthetic | $1M | 6 576 | 5 | 80.0 % | +2.42 % | 1.00 | −2.83 % | 17 % |
-| 2022–2025 hyper-aggressive | **real Binance** | $5K | 35 063 | 63 | 61.9 % | −17.57 % | −0.04 | −50.72 % | 88 % |
-| 2022–2025 dynamic vol target | **real Binance** | $5K | 35 063 | 63 | 52.4 % | −32.59 % | −0.46 | −46.11 % | 58 % |
+| 2022 (synthetic) | synthetic | $1M | 8 760 | 6 | 83.3 % | +4.24 % | 1.34 | −2.21 % | 0 |
+| 2025 Q3–2026 Q1 (synthetic) | synthetic | $1M | 6 576 | 5 | 80.0 % | +2.42 % | 1.00 | −2.83 % | 0 |
+| 2022–2025 hyper-aggressive (Z_SL=4.0) | **real Binance** | $5K | 35 063 | 63 | 61.9 % | −17.57 % | −0.04 | −50.72 % | 4 |
+| 2022–2025 dynamic vol target (Z_SL=4.0) | **real Binance** | $5K | 35 063 | 63 | 52.4 % | −32.59 % | −0.46 | −46.11 % | 4 |
+| 2022–2025 static vol + Z_SL=3.0 | **real Binance** | $5K | 35 063 | 71 | 49.3 % | −44.94 % | −0.48 | −59.76 % | **25** |
 
 `backtest_demo.py` is currently configured for the **2022** period (`start=datetime(2022,1,1), n_bars=8760`).
 To re-run 2025 Q3–2026 Q1: change to `start=datetime(2025,7,1), n_bars=6576`.
@@ -304,6 +305,12 @@ Result: DVT reduced stop-loss magnitude (−33 %) but also cut mean-reversion pr
 (−52 %), net worsening return by 15 pp. The BASELINE_HALFLIFE=48h assumption proved
 incorrect — short HL correlates with *higher* spread volatility, not safety, in this
 crypto universe. MDD improved slightly (−50.7 % → −46.1 %).
+
+**Run 5 (real data, Z_SL=3.0) parameters:** same as Run 3 (static 60 %) but
+`Z_STOP_LOSS` tightened 4.0 → 3.0. Result: catastrophic — stop count exploded 4 → 25,
+gross P&L turned negative (−$231 before costs), total return −44.9 %, MDD −59.8 %.
+Crypto spreads routinely spike past 3σ then revert; cutting at 3.0 locks in losses
+at the worst possible moment. **Z_STOP_LOSS=4.0 is the correct calibration.**
 
 > **Legacy note:** Pre-hourly results (700 daily bars, annualised at √252,
 > 8 trades, −3.42 % return) are preserved in README.md under

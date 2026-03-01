@@ -67,17 +67,14 @@ import numpy as np
 import pandas as pd
 
 from config import (
-    BASELINE_HALFLIFE,
     HOURLY_FUNDING_RATE,
     INITIAL_CAPITAL,
     KALMAN_DELTA,
     KALMAN_VE,
     LOOKBACK_WINDOW,
     MAX_HALFLIFE,
-    MAX_TARGET_VOL,
     MIN_HALFLIFE,
     MIN_HISTORY,
-    MIN_TARGET_VOL,
     OU_HALFLIFE_MULTIPLIER,
     REBALANCE_THRESHOLD,
     RESCAN_INTERVAL,
@@ -415,13 +412,6 @@ class BacktestEngine:
             self._close_position(bar_idx, current_date, exit_reason)
             return
 
-        # Dynamic vol target for rebalance uses the refreshed half-life
-        rebal_target_vol = float(np.clip(
-            MAX_TARGET_VOL * (BASELINE_HALFLIFE / max(new_hl, BASELINE_HALFLIFE)),
-            MIN_TARGET_VOL,
-            MAX_TARGET_VOL,
-        ))
-
         # Rebalance: recalculate target sizes; execute at open prices
         new_shares_y, new_shares_x = compute_position_size(
             spread_series=spread_arr,
@@ -430,7 +420,6 @@ class BacktestEngine:
             price_x=exec_x,
             hedge_ratio=new_beta,
             direction=pos.direction,
-            target_vol=rebal_target_vol,
         )
 
         # Always update the KF-derived hedge ratio even if no rebalance executes
@@ -518,14 +507,6 @@ class BacktestEngine:
 
         half_life = float(np.clip(ou["half_life"], MIN_HALFLIFE, MAX_HALFLIFE))
 
-        # Dynamic volatility target: scale aggressively for fast-reverting pairs,
-        # defensively for slow ones.  Clamped to [MIN_TARGET_VOL, MAX_TARGET_VOL].
-        dynamic_target_vol = float(np.clip(
-            MAX_TARGET_VOL * (BASELINE_HALFLIFE / max(half_life, BASELINE_HALFLIFE)),
-            MIN_TARGET_VOL,
-            MAX_TARGET_VOL,
-        ))
-
         # Regime filter (fitted on prev-close spread)
         self._regime.fit(spread_arr)
         if not self._regime.is_mean_reverting(spread_arr):
@@ -559,7 +540,6 @@ class BacktestEngine:
             price_x=exec_x,
             hedge_ratio=current_beta,
             direction=direction,
-            target_vol=dynamic_target_vol,
         )
 
         if shares_y == 0.0 or shares_x == 0.0:
@@ -595,7 +575,7 @@ class BacktestEngine:
 
         logger.info(
             "%s  OPEN  %s/%s  dir=%+d  z=%.2f  hl=%.1fh  β=%.4f  "
-            "p=%.4f  tvol=%.0f%%  shares_y=%.4f  shares_x=%.4f",
+            "p=%.4f  shares_y=%.4f  shares_x=%.4f",
             current_date,
             sym_y,
             sym_x,
@@ -604,7 +584,6 @@ class BacktestEngine:
             half_life,
             current_beta,
             pvalue,
-            dynamic_target_vol * 100,
             shares_y,
             shares_x,
         )

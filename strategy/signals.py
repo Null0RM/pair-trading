@@ -52,7 +52,7 @@ import numpy as np
 from config import (
     LOOKBACK_WINDOW,
     MAX_LEVERAGE,
-    MAX_TARGET_VOL,
+    TARGET_VOL,
     Z_ENTRY,
     Z_EXIT,
 )
@@ -121,7 +121,7 @@ def compute_position_size(
     price_x: float,
     hedge_ratio: float,
     direction: int,
-    target_vol: float = MAX_TARGET_VOL,
+    target_vol: float = TARGET_VOL,
     max_leverage: float = MAX_LEVERAGE,
     window: int = LOOKBACK_WINDOW,
 ) -> tuple[float, float]:

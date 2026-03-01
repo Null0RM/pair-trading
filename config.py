@@ -39,10 +39,8 @@ RESCAN_INTERVAL: int = 12                  # Bars between pair-scan attempts whe
 # ---------------------------------------------------------------------------
 Z_ENTRY: float = 1.5                       # |z-score| required to open a trade
 Z_EXIT: float = 0.25                       # |z-score| at which we take profit
-Z_STOP_LOSS: float = 4.0                   # |z-score| hard stop-loss (spread blow-up)
-MIN_TARGET_VOL: float = 0.15              # Floor on dynamic vol target (slow-reverting pairs)
-MAX_TARGET_VOL: float = 0.60              # Ceiling on dynamic vol target (fast-reverting pairs)
-BASELINE_HALFLIFE: float = 48.0           # Half-life (hours) that maps to MAX_TARGET_VOL
+Z_STOP_LOSS: float = 3.0                   # |z-score| hard stop-loss (spread blow-up)
+TARGET_VOL: float = 0.60                   # Target annualised portfolio volatility
 MAX_LEVERAGE: float = 4.0                  # Hard cap on notional / portfolio_value
 
 # ---------------------------------------------------------------------------

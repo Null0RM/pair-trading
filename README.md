@@ -275,7 +275,7 @@ Close    : cash += shares_y·open_y   + shares_x·open_x   − exit_cost
 ## Backtest Results
 
 > Runs 1–2 use **synthetic** hourly data (20 symbols, 8 cointegrated pairs baked
-> in by construction). Runs 3–4 use **real Binance data** fetched via CCXT.
+> in by construction). Runs 3–5 use **real Binance data** fetched via CCXT.
 > All runs charge 0.1 % per leg + hourly funding rate every bar.
 
 ---
@@ -584,6 +584,67 @@ Fast-reverting pairs (HL ≤ 48 h) → 60 % vol.  Slow pairs (HL = 288 h) → 15
    assumption.  A higher baseline (e.g. 144–192 h) would flip the scaling direction:
    treating medium-speed pairs as the "normal" case and applying maximum leverage only to
    the fastest, most reliably mean-reverting spreads identified in back-testing.
+
+---
+
+### Run 5 — 2022–2025 Static Vol + Tighter Stop-Loss Z=3.0 (Real Binance Data)
+
+**35,063 hourly bars · 500-bar warm-up · 29 curated symbols · $5,000 initial capital**
+
+Same as Run 3 (static `TARGET_VOL=0.60`) but with `Z_STOP_LOSS` tightened from 4.0 → **3.0**,
+designed to cut losses earlier when spreads structurally break.
+
+#### Performance Summary — All Real-Data Runs
+
+| Metric | Run 3 — Z_SL=4.0 | Run 4 — DVT | **Run 5 — Z_SL=3.0** |
+|---|---:|---:|---:|
+| **Final value** | $4,121.72 | $3,370.56 | **$2,753.13** |
+| **Total return** | −17.57 % | −32.59 % | **−44.94 %** |
+| **Max drawdown** | −50.72 % | −46.11 % | **−59.76 %** |
+| **Sharpe ratio** | −0.04 | −0.46 | **−0.48** |
+| **Total trades** | 63 | 63 | **71** |
+| **Win rate** | 61.9 % | 52.4 % | **49.3 %** |
+| **Stop-losses** | **4** | **4** | **25** |
+| **Avg stop P&L** | −$539 | −$362 | **−$162** |
+| **Total stop damage** | −$2,158 | −$1,449 | **−$4,051** |
+| **Total gross P&L** | +$1,351 | +$2,628 | **−$231** |
+| **Total costs** | $1,195 | $1,529 | **$1,273** |
+
+#### Breakdown by Exit Reason
+
+| Reason | Trades | Net P&L | Avg / trade |
+|--------|-------:|--------:|------------:|
+| `mean_reversion` ✅ | 27 | +$4,155 | +$154 |
+| `stop_loss` ❌ | 25 | −$4,051 | −$162 |
+| `time_stop` ⏱ | 19 | −$2,351 | −$124 |
+
+#### Key Observations
+
+1. **Tighter stop-loss exploded stop count from 4 → 25** — lowering `Z_STOP_LOSS` from
+   4.0 to 3.0 converted 21 previously non-stop trades into forced exits.  Crypto spreads
+   routinely spike past 3σ during temporary liquidity events before snapping back;
+   `Z_STOP_LOSS=3.0` fires precisely at those momentary extremes, locking in the worst
+   possible exit price.
+
+2. **Gross P&L turned negative (−$231)** — the only run where the strategy loses money
+   even before transaction costs are applied.  This is the clearest signal that the
+   stop-loss is too tight: raw price moves are already negative because exits happen at
+   the peak of adverse spread movement rather than letting reversion play out.
+
+3. **Per-stop damage fell but total damage tripled** — average stop-loss shrank from
+   −$539 to −$162 (smaller individual hits), but 25 stops × −$162 = −$4,051 total vs
+   4 stops × −$539 = −$2,158.  The "cut losses quickly" intuition is correct in
+   direction but catastrophically wrong in magnitude for mean-reversion strategies,
+   where the worst moment to exit is exactly when the spread is maximally dislocated.
+
+4. **AAVE/THETA (2024-02-16) is the archetypal failure** — opened at |z|=1.58, stopped
+   at |z|=3.0 for −$624.  In Run 3 this same spread reverted to mean_reversion exit for
+   +$156, a swing of +$780 on a single trade.
+
+5. **Conclusion — `Z_STOP_LOSS=4.0` is the correct calibration for this universe.**
+   The 2022–2025 crypto mean-reversion strategy needs room (4σ) for spreads to breathe.
+   The right lever for tail-risk control is the cointegration quality filter (EG p-value,
+   positive β) and `MAX_HALFLIFE` gate, not a tighter z-score stop.
 
 ---
 
