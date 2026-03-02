@@ -275,7 +275,7 @@ Close    : cash += shares_y·open_y   + shares_x·open_x   − exit_cost
 ## Backtest Results
 
 > Runs 1–2 use **synthetic** hourly data (20 symbols, 8 cointegrated pairs baked
-> in by construction). Runs 3–5 use **real Binance data** fetched via CCXT.
+> in by construction). Runs 3–6 use **real Binance data** fetched via CCXT.
 > All runs charge 0.1 % per leg + hourly funding rate every bar.
 
 ---
@@ -648,6 +648,95 @@ designed to cut losses earlier when spreads structurally break.
 
 ---
 
+### Run 6 — 2024–2025 Sniper Mode (Real Binance Data)
+
+**17,544 hourly bars · 500-bar warm-up · 29 curated symbols · $5,000 initial capital**
+
+"Sniper Mode" raises the entry bar, reduces leverage, and scans less frequently to
+prioritise trade quality over quantity.  `momentum_window` widened to 6 bars for
+stronger confirmation in the more volatile 2024–2025 regime.
+
+Config: `Z_ENTRY=1.75`, static `TARGET_VOL=45 %`, `MAX_LEVERAGE=3.0`,
+`RESCAN_INTERVAL=24`, `Z_STOP_LOSS=4.0`, `MAX_HALFLIFE=288 h`,
+`OU_HALFLIFE_MULTIPLIER=2.5`, `momentum_window=6`.
+
+#### Trade Log
+
+| # | Entry | Exit | Pair | Dir | HL(h) | β | Hold(h) | Costs | Net P&L | Reason |
+|---|-------|------|------|-----|------:|--:|--------:|------:|--------:|--------|
+| 1 | 2024-01-24 | 2024-01-26 | ETC/NEAR  | short | 72.1 | 3.044 |  41 | $9.05  | **+$292.28** | mean\_reversion ✅ |
+| 2 | 2024-02-14 | 2024-02-15 | SOL/DOT   | long  | 26.3 | 2.331 |  21 | $21.18 |  −$210.03    | stop\_loss ❌ |
+| 3 | 2024-06-09 | 2024-06-12 | ETH/DOT   | short | 60.3 | 4.368 |  77 | $15.67 | **+$209.55** | mean\_reversion ✅ |
+| 4 | 2024-06-19 | 2024-06-22 | ADA/ALGO  | long  | 27.8 | 0.478 |  72 | $25.19 |  +$34.57     | time\_stop ⏱ |
+| 5 | 2024-08-04 | 2024-08-05 | ADA/DOGE  | long  |211.4 | 0.475 |   6 | $14.58 |  −$294.56    | stop\_loss ❌ |
+| 6 | 2024-10-27 | 2024-10-29 | GRT/XTZ   | short | 44.4 | 4.232 |  44 | $17.69 | **+$188.19** | mean\_reversion ✅ |
+| 7 | 2025-01-02 | 2025-01-05 | DOGE/XLM  | long  | 70.8 | 1.166 |  77 | $16.20 | **+$223.31** | mean\_reversion ✅ |
+| 8 | 2025-02-04 | 2025-02-07 | DOGE/XTZ  | long  | 25.5 | 0.845 |  65 | $20.25 |  −$154.39    | time\_stop ⏱ |
+| 9 | 2025-04-23 | 2025-04-30 | ADA/DOGE  | short | 62.6 | 0.206 | 169 | $23.23 |  −$13.65     | time\_stop ⏱ |
+|10 | 2025-07-10 | 2025-07-10 | ADA/MANA  | short |150.5 | 0.367 |   4 | $15.07 |  −$255.54    | stop\_loss ❌ |
+
+#### Performance Summary — All Real-Data Runs
+
+| Metric | Run 3 — Z=1.5, Vol=60 % | Run 4 — DVT | Run 5 — Z_SL=3.0 | **Run 6 — Sniper** |
+|---|---:|---:|---:|---:|
+| **Period** | 2022–2025 | 2022–2025 | 2022–2025 | **2024–2025** |
+| **Final value** | $4,121.72 | $3,370.56 | $2,753.13 | **$5,019.72** |
+| **Total return** | −17.57 % | −32.59 % | −44.94 % | **+0.39 %** ✅ |
+| **Max drawdown** | −50.72 % | −46.11 % | −59.76 % | **−7.87 %** ✅ |
+| **Sharpe ratio** | −0.04 | −0.46 | −0.48 | **+0.07** ✅ |
+| **Total trades** | 63 | 63 | 71 | **10** |
+| **Win rate** | 61.9 % | 52.4 % | 49.3 % | **50.0 %** |
+| **Stop-losses** | 4 | 4 | 25 | **3** |
+| **Total gross P&L** | +$1,351 | +$2,628 | −$231 | **+$259** |
+| **Total costs** | $1,195 | $1,529 | $1,273 | **$178** |
+| **Cost-to-gross ratio** | 88.4 % | 58.2 % | n/a | **68.7 %** |
+
+#### Breakdown by Exit Reason
+
+| Reason | Trades | Net P&L | Avg / trade |
+|--------|-------:|--------:|------------:|
+| `mean_reversion` ✅ | 4 | +$913.33 | +$228 |
+| `time_stop` ⏱ | 3 | −$133.47 | −$44 |
+| `stop_loss` ❌ | 3 | −$760.13 | −$253 |
+
+#### Breakdown by Year
+
+| Year | Trades | Net P&L | Win Rate |
+|------|-------:|--------:|---------:|
+| 2024 | 6 | +$220.00 | 66.7 % |
+| 2025 | 4 | −$200.27 | 25.0 % |
+
+#### Key Observations
+
+1. **First real-data run to finish in the black** — Sniper Mode returned +$19.72 (+0.39 %)
+   vs losses on all three prior real-data runs.  The lower leverage cap (3×) and reduced
+   vol target (45 %) kept the P&L range tight enough that costs didn't consume the gross.
+
+2. **MDD slashed from −51 % to −8 %** — the single biggest structural improvement.
+   Smaller notionals at every entry meant each adverse move cost less, and the account
+   never went into a death spiral.  With Run 3's 4× leverage, a single stop-loss cost
+   −$1,185; the worst hit here was −$295 (ADA/DOGE, Aug 2024).
+
+3. **Cost drag remains the dominant challenge** — $178 costs on $259 gross = **68.7 %
+   cost-to-gross ratio**.  With 10 trades and 0.1 % per leg, commissions and funding
+   consumed most of the edge.  Reducing trade frequency further or tightening the EG
+   p-value threshold are the logical next levers.
+
+4. **3 stop-losses out of 10 trades (30 % stop rate)** — higher than Run 3's 6.3 %
+   (4/63).  The wider `momentum_window=6` and higher `Z_ENTRY=1.75` did not prevent
+   cointegration breaks; `MAX_HALFLIFE=288 h` still admits slow-reverting pairs prone
+   to structural failure (ADA/DOGE HL=211 h, ADA/MANA HL=150 h both stopped out).
+
+5. **2024 carried 2025** — 2024 net +$220, 2025 net −$200.  The 2025 portion had only
+   4 trades, of which 3 lost money.  The bull market conditions post-2024 halving may
+   favour trending over mean-reversion, making this a strategy to deploy selectively.
+
+6. **Win rate still 50 %** — the z=1.75 entry bar did not improve signal quality vs
+   z=1.5 in Run 3 (61.9 %).  The core issue is that any cointegrated pair found by EG
+   scan at a given moment may no longer be cointegrated by the time the trade resolves.
+
+---
+
 ## Configuration
 
 All parameters live in `config.py`.  Key knobs:
@@ -656,19 +745,19 @@ All parameters live in `config.py`.  Key knobs:
 # Universe (29 curated 2022-safe liquid coins; see config.py)
 TOP_40_SYMBOLS      = [...]
 TIMEFRAME           = "1h"
-START_DATE          = "2022-01-01T00:00:00Z"   # inclusive fetch start
+START_DATE          = "2024-01-01T00:00:00Z"   # inclusive fetch start (Sniper Mode)
 END_DATE            = "2025-12-31T23:59:59Z"   # inclusive fetch end
 
 # Calibration
 LOOKBACK_WINDOW     = 336            # bars for rolling KF + EG scan (14 days × 24 h)
 MIN_HISTORY         = 500            # warm-up bars before first trade
-RESCAN_INTERVAL     = 12             # bars between pair-scans when flat
+RESCAN_INTERVAL     = 24             # bars between pair-scans when flat (once/day)
 
 # Strategy
-Z_ENTRY             = 1.5            # entry gate (|z-score|)
+Z_ENTRY             = 1.75           # entry gate (|z-score|) — tighter than Run 3
 Z_EXIT              = 0.25           # profit-take gate
 Z_STOP_LOSS         = 4.0            # hard stop — exit if |z| blows out above this
-TARGET_VOL          = 0.60           # 60 % annual vol target (annualised at √8760)
+TARGET_VOL          = 0.45           # 45 % annual vol target (reduced from 60 %)
 TRANSACTION_COST    = 0.001          # 0.1 % per leg per change
 HOURLY_FUNDING_RATE = 0.0000125      # ≈ 0.01 % per 8 h, charged every bar
 
@@ -676,7 +765,7 @@ HOURLY_FUNDING_RATE = 0.0000125      # ≈ 0.01 % per 8 h, charged every bar
 OU_HALFLIFE_MULTIPLIER = 2.5         # time-stop = 2.5 × half-life (in hours)
 MIN_HALFLIFE        = 2              # floor on OU half-life (hours)
 MAX_HALFLIFE        = 288            # hard cap — entries aborted above this (12 days)
-MAX_LEVERAGE        = 4.0            # notional / portfolio cap
+MAX_LEVERAGE        = 3.0            # notional / portfolio cap (reduced from 4.0)
 REBALANCE_THRESHOLD = 0.10           # min fractional leg deviation to trigger a rebalance
 
 # Models

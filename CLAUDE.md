@@ -278,7 +278,7 @@ constructed pairs dominate the EG scan.
 
 ## Backtest Run Results
 
-Five runs documented in `README.md` (full trade logs + comparisons):
+Six runs documented in `README.md` (full trade logs + comparisons):
 
 | Period | Data | Capital | Bars | Trades | Win % | Net Return | Sharpe | MDD | Stops |
 |---|---|---|---|---|---|---|---|---|---|
@@ -287,6 +287,7 @@ Five runs documented in `README.md` (full trade logs + comparisons):
 | 2022–2025 hyper-aggressive (Z_SL=4.0) | **real Binance** | $5K | 35 063 | 63 | 61.9 % | −17.57 % | −0.04 | −50.72 % | 4 |
 | 2022–2025 dynamic vol target (Z_SL=4.0) | **real Binance** | $5K | 35 063 | 63 | 52.4 % | −32.59 % | −0.46 | −46.11 % | 4 |
 | 2022–2025 static vol + Z_SL=3.0 | **real Binance** | $5K | 35 063 | 71 | 49.3 % | −44.94 % | −0.48 | −59.76 % | **25** |
+| **2024–2025 Sniper Mode** | **real Binance** | $5K | 17 544 | **10** | 50.0 % | **+0.39 %** ✅ | **+0.07** | **−7.87 %** | 3 |
 
 `backtest_demo.py` is currently configured for the **2022** period (`start=datetime(2022,1,1), n_bars=8760`).
 To re-run 2025 Q3–2026 Q1: change to `start=datetime(2025,7,1), n_bars=6576`.
@@ -311,6 +312,14 @@ crypto universe. MDD improved slightly (−50.7 % → −46.1 %).
 gross P&L turned negative (−$231 before costs), total return −44.9 %, MDD −59.8 %.
 Crypto spreads routinely spike past 3σ then revert; cutting at 3.0 locks in losses
 at the worst possible moment. **Z_STOP_LOSS=4.0 is the correct calibration.**
+
+**Run 6 (real data, Sniper Mode) parameters:** `START_DATE=2024-01-01`, `Z_ENTRY=1.75`,
+static `TARGET_VOL=0.45`, `MAX_LEVERAGE=3.0`, `RESCAN_INTERVAL=24`, `Z_STOP_LOSS=4.0`,
+`MAX_HALFLIFE=288h`, `OU_HALFLIFE_MULTIPLIER=2.5`, `momentum_window=6`.
+Result: **first profitable real-data run** (+0.39 %, MDD −7.87 %).  Lower leverage
+(3× vs 4×) and reduced vol target (45 % vs 60 %) contained drawdown dramatically.
+Cost-to-gross still 68.7 % — cost drag remains the dominant challenge.  Stop rate
+30 % (3/10) indicates `MAX_HALFLIFE=288h` still admits cointegration-break-prone pairs.
 
 > **Legacy note:** Pre-hourly results (700 daily bars, annualised at √252,
 > 8 trades, −3.42 % return) are preserved in README.md under

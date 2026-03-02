@@ -23,7 +23,7 @@ TOP_40_SYMBOLS: list[str] = [
 # ---------------------------------------------------------------------------
 EXCHANGE_ID: str = "binance"
 TIMEFRAME: str = "1h"
-START_DATE: str = "2022-01-01T00:00:00Z"   # Inclusive start for data fetch
+START_DATE: str = "2024-01-01T00:00:00Z"   # Inclusive start for data fetch
 END_DATE: str   = "2025-12-31T23:59:59Z"   # Inclusive end for data fetch
 
 # ---------------------------------------------------------------------------
@@ -32,16 +32,16 @@ END_DATE: str   = "2025-12-31T23:59:59Z"   # Inclusive end for data fetch
 INITIAL_CAPITAL: float = 5_000.0           # USD — retail aggressive account
 LOOKBACK_WINDOW: int = 336                 # Hours used for rolling calibration (14 days)
 MIN_HISTORY: int = 500                     # Bars before the engine starts trading
-RESCAN_INTERVAL: int = 12                  # Bars between pair-scan attempts when flat
+RESCAN_INTERVAL: int = 24                  # Bars between pair-scan attempts when flat
 
 # ---------------------------------------------------------------------------
 # Strategy / signals
 # ---------------------------------------------------------------------------
-Z_ENTRY: float = 1.5                       # |z-score| required to open a trade
+Z_ENTRY: float = 1.75                      # |z-score| required to open a trade
 Z_EXIT: float = 0.25                       # |z-score| at which we take profit
-Z_STOP_LOSS: float = 3.0                   # |z-score| hard stop-loss (spread blow-up)
-TARGET_VOL: float = 0.60                   # Target annualised portfolio volatility
-MAX_LEVERAGE: float = 4.0                  # Hard cap on notional / portfolio_value
+Z_STOP_LOSS: float = 4.0                   # |z-score| hard stop-loss (spread blow-up)
+TARGET_VOL: float = 0.45                   # Target annualised portfolio volatility
+MAX_LEVERAGE: float = 3.0                  # Hard cap on notional / portfolio_value
 
 # ---------------------------------------------------------------------------
 # Risk / costs
